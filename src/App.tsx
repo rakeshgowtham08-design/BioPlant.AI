@@ -11,6 +11,7 @@ import { STITCH_FIELDS, STITCH_INITIAL_HISTORY } from './services/fieldsData';
 import { FieldProfile, HistoricalRecord, SoilMetrics, WeatherMetrics, PredictionResult, ActiveScreen } from './types';
 import { initializeRandomForest, runBioPlantIntelligence } from './ml/engine';
 import { LanguageProvider } from './context/LanguageContext';
+import { isBackendAvailable, getCropPrediction, checkBackendHealth } from './services/apiService';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {

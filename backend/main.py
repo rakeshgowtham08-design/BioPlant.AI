@@ -4,16 +4,39 @@ Crop Planning & Soil Recommendation Engine
 Built with FastAPI & Random Forest Classifier
 """
 
+import os
 import math
 import random
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from pydantic import BaseModel, Field
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, status
     from fastapi.middleware.cors import CORSMiddleware
+    import supabase
 except ImportError:
     FastAPI = None
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# Initialize Supabase client if credentials are available
+supabase_client = None
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+    try:
+        supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        print("✅ Supabase client initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize Supabase client: {e}")
+else:
+    print("⚠️ Supabase credentials not configured. Using in-memory storage.")
 
 # ---------------------------------------------------------
 # Crop Knowledge Base & Benchmarks (FAO / ICAR Standards)
@@ -188,11 +211,18 @@ if FastAPI:
         version="2.4.0"
     )
 
+    # Configure CORS for production
+    origins = [
+        FRONTEND_URL,
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -221,64 +251,118 @@ if FastAPI:
         crop_type: str
         total_volume_mt: float = 1000.0
 
-    # In-memory storage mirroring Supabase tables
-    deals_db = [
-        {
-            "id": "deal-01",
-            "field_id": "field-01",
-            "buyer_name": "AgroCorp International",
-            "crop_type": "Rice",
-            "price_per_ton": 310.0,
-            "quantity_sold": 1500.0,
-            "total_amount": 465000.0,
-            "transaction_status": "Paid",
-            "contract_hash": "0x8f21e4a189c42b91024e81cb8017cba4",
-            "fulfillment_percent": 100,
-            "created_at": "2026-10-26T14:22:00Z"
-        },
-        {
-            "id": "deal-02",
-            "field_id": "field-02",
-            "buyer_name": "Delta Millers & Grain Ltd",
-            "crop_type": "Rice",
-            "price_per_ton": 320.0,
-            "quantity_sold": 800.0,
-            "total_amount": 256000.0,
-            "transaction_status": "In Escrow",
-            "contract_hash": "0x7e14d9b012c8a7413f9901ad47a321be",
-            "fulfillment_percent": 75,
-            "created_at": "2026-11-02T11:45:00Z"
-        }
-    ]
+    # Database helper functions
+    async def get_marketplace_deals_from_db():
+        """Fetch marketplace deals from Supabase or fallback to sample data"""
+        if supabase_client:
+            try:
+                response = supabase_client.table("marketplace_deals") \
+                    .select("*") \
+                    .order("created_at", desc=True) \
+                    .execute()
+                if response.data:
+                    return response.data
+            except Exception as e:
+                print(f"⚠️ Error fetching deals from Supabase: {e}")
 
-    customers_db = [
-        {
-            "id": "cust-01",
-            "company_name": "AgroCorp International",
-            "contact_person": "Henrik Lindqvist",
-            "email": "h.lindqvist@agrocorp-trade.com",
-            "phone": "+41 22 819 4000",
-            "crop_type": "Rice",
-            "active_contracts_count": 3,
-            "total_volume_mt": 4200.0,
-            "total_revenue": 1302000.0,
-            "status": "Active Off-taker",
-            "created_at": "2026-10-24T10:00:00Z"
-        },
-        {
-            "id": "cust-02",
-            "company_name": "Delta Millers & Grain Ltd",
-            "contact_person": "Anand K. Sharma",
-            "email": "procurement@deltamillers.in",
-            "phone": "+91 80 4112 9081",
-            "crop_type": "Rice",
-            "active_contracts_count": 2,
-            "total_volume_mt": 1800.0,
-            "total_revenue": 576000.0,
-            "status": "Active Off-taker",
-            "created_at": "2026-10-31T09:30:00Z"
-        }
-    ]
+        # Fallback sample data
+        return [
+            {
+                "id": "deal-01",
+                "field_id": "field-01",
+                "buyer_name": "AgroCorp International",
+                "crop_type": "Rice",
+                "price_per_ton": 310.0,
+                "quantity_sold": 1500.0,
+                "total_amount": 465000.0,
+                "transaction_status": "Paid",
+                "contract_hash": "0x8f21e4a189c42b91024e81cb8017cba4",
+                "fulfillment_percent": 100,
+                "created_at": "2026-10-26T14:22:00Z"
+            },
+            {
+                "id": "deal-02",
+                "field_id": "field-02",
+                "buyer_name": "Delta Millers & Grain Ltd",
+                "crop_type": "Rice",
+                "price_per_ton": 320.0,
+                "quantity_sold": 800.0,
+                "total_amount": 256000.0,
+                "transaction_status": "In Escrow",
+                "contract_hash": "0x7e14d9b012c8a7413f9901ad47a321be",
+                "fulfillment_percent": 75,
+                "created_at": "2026-11-02T11:45:00Z"
+            }
+        ]
+
+    async def get_customers_from_db():
+        """Fetch customer records from Supabase or fallback to sample data"""
+        if supabase_client:
+            try:
+                response = supabase_client.table("customer_records") \
+                    .select("*") \
+                    .order("created_at", desc=True) \
+                    .execute()
+                if response.data:
+                    return response.data
+            except Exception as e:
+                print(f"⚠️ Error fetching customers from Supabase: {e}")
+
+        # Fallback sample data
+        return [
+            {
+                "id": "cust-01",
+                "company_name": "AgroCorp International",
+                "contact_person": "Henrik Lindqvist",
+                "email": "h.lindqvist@agrocorp-trade.com",
+                "phone": "+41 22 819 4000",
+                "crop_type": "Rice",
+                "active_contracts_count": 3,
+                "total_volume_mt": 4200.0,
+                "total_revenue": 1302000.0,
+                "status": "Active Off-taker",
+                "created_at": "2026-10-24T10:00:00Z"
+            },
+            {
+                "id": "cust-02",
+                "company_name": "Delta Millers & Grain Ltd",
+                "contact_person": "Anand K. Sharma",
+                "email": "procurement@deltamillers.in",
+                "phone": "+91 80 4112 9081",
+                "crop_type": "Rice",
+                "active_contracts_count": 2,
+                "total_volume_mt": 1800.0,
+                "total_revenue": 576000.0,
+                "status": "Active Off-taker",
+                "created_at": "2026-10-31T09:30:00Z"
+            }
+        ]
+
+    async def create_deal_in_db(deal_data: dict):
+        """Create a new marketplace deal in Supabase"""
+        if supabase_client:
+            try:
+                response = supabase_client.table("marketplace_deals") \
+                    .insert(deal_data) \
+                    .execute()
+                return response.data[0] if response.data else deal_data
+            except Exception as e:
+                print(f"⚠️ Error creating deal in Supabase: {e}")
+
+        return deal_data
+
+    async def create_customer_in_db(customer_data: dict):
+        """Create a new customer record in Supabase"""
+        if supabase_client:
+            try:
+                response = supabase_client.table("customer_records") \
+                    .insert(customer_data) \
+                    .execute()
+                return response.data[0] if response.data else customer_data
+            except Exception as e:
+                print(f"⚠️ Error creating customer in Supabase: {e}")
+
+        return customer_data
 
     @app.get("/")
     def root():
@@ -292,16 +376,30 @@ if FastAPI:
     # ---------------------------------------------------------
     # Commercial B2B Marketplace & Escrow Endpoints
     # ---------------------------------------------------------
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for Render monitoring"""
+        db_status = "connected" if supabase_client else "not_configured"
+        return {
+            "status": "healthy",
+            "service": "BioPlant.AI Backend API",
+            "database": db_status,
+            "timestamp": datetime.now().isoformat()
+        }
+
     @app.get("/api/marketplace/deals")
-    def get_marketplace_deals():
-        return deals_db
+    async def get_marketplace_deals():
+        """Get all marketplace deals from Supabase"""
+        deals = await get_marketplace_deals_from_db()
+        return deals
 
     @app.post("/api/marketplace/deals")
-    def create_marketplace_deal(payload: DealCreateInput):
+    async def create_marketplace_deal(payload: DealCreateInput):
+        """Create a new marketplace deal in Supabase"""
         total = payload.price_per_ton * payload.quantity_sold
         chars = '0123456789abcdef'
         contract_hash = '0x' + ''.join(random.choice(chars) for _ in range(32))
-        
+
         deal = {
             "id": f"deal-{int(random.random()*100000)}",
             "field_id": payload.field_id,
@@ -313,17 +411,21 @@ if FastAPI:
             "transaction_status": "Pending Dispatch",
             "contract_hash": contract_hash,
             "fulfillment_percent": 0,
-            "created_at": "2026-11-07T12:00:00Z"
+            "created_at": datetime.now().isoformat()
         }
-        deals_db.insert(0, deal)
-        return deal
+
+        created_deal = await create_deal_in_db(deal)
+        return created_deal
 
     @app.get("/api/customers")
-    def get_customers():
-        return customers_db
+    async def get_customers():
+        """Get all customer records from Supabase"""
+        customers = await get_customers_from_db()
+        return customers
 
     @app.post("/api/customers")
-    def create_customer(payload: CustomerCreateInput):
+    async def create_customer(payload: CustomerCreateInput):
+        """Create a new customer record in Supabase"""
         customer = {
             "id": f"cust-{int(random.random()*100000)}",
             "company_name": payload.company_name,
@@ -335,10 +437,11 @@ if FastAPI:
             "total_volume_mt": payload.total_volume_mt,
             "total_revenue": payload.total_volume_mt * 310.0,
             "status": "Active Off-taker",
-            "created_at": "2026-11-07T12:00:00Z"
+            "created_at": datetime.now().isoformat()
         }
-        customers_db.insert(0, customer)
-        return customer
+
+        created_customer = await create_customer_in_db(customer)
+        return created_customer
 
     @app.post("/api/predict")
     def predict_crop(data: SoilInput):

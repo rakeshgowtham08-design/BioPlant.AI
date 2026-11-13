@@ -1,6 +1,7 @@
 services:
-  - type: web
-    name: bioplant-ai
+  # Frontend - Static Site (React + Vite)
+  - type: static
+    name: bioplant-ai-frontend
     env: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
@@ -8,3 +9,35 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    envVars:
+      # Frontend environment variables - to be configured in Render dashboard
+      - key: VITE_API_URL
+        fromService:
+          name: bioplant-ai-backend
+          type: web
+          property: url
+      - key: VITE_SUPABASE_URL
+        sync: false  # Configure manually in Render dashboard
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false  # Configure manually in Render dashboard
+
+  # Backend - FastAPI Web Service
+  - type: web
+    name: bioplant-ai-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      # Backend environment variables - to be configured in Render dashboard
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          name: bioplant-ai-frontend
+          type: static
+          property: url
