@@ -11,7 +11,7 @@ import { STITCH_FIELDS, STITCH_INITIAL_HISTORY } from './services/fieldsData';
 import { FieldProfile, HistoricalRecord, SoilMetrics, WeatherMetrics, PredictionResult, ActiveScreen } from './types';
 import { initializeRandomForest, runBioPlantIntelligence } from './ml/engine';
 import { LanguageProvider } from './context/LanguageContext';
-import { isBackendAvailable, getCropPrediction, checkBackendHealth } from './services/apiService';
+import { getCropPrediction } from './services/apiService';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -88,18 +88,30 @@ export function AppContent() {
     setWeather(field.weatherProfile);
   };
 
-  // Run BioPlant Intelligence Random Forest Classifier
-  const handleExecuteIntelligence = () => {
+  // Run BioPlant Intelligence - tries backend API first, falls back to local Random Forest
+  const handleExecuteIntelligence = async () => {
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = runBioPlantIntelligence(soil, weather, selectedField.id);
+    try {
+      const backendResult = await getCropPrediction(soil, weather, selectedField.id);
+      // Map backend response shape to frontend PredictionResult shape
+      const result: PredictionResult = backendResult as PredictionResult;
       setPredictionResult(result);
       setIsLoading(false);
       setIsSavedInHistory(false);
       setCurrentScreen('results');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 600);
+    } catch {
+      // Backend unavailable - use local Random Forest engine
+      setTimeout(() => {
+        const result = runBioPlantIntelligence(soil, weather, selectedField.id);
+        setPredictionResult(result);
+        setIsLoading(false);
+        setIsSavedInHistory(false);
+        setCurrentScreen('results');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 600);
+    }
   };
 
   // Jump from Dashboard to Diagnostics
