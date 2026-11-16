@@ -11,7 +11,7 @@ import { STITCH_FIELDS, STITCH_INITIAL_HISTORY } from './services/fieldsData';
 import { FieldProfile, HistoricalRecord, SoilMetrics, WeatherMetrics, PredictionResult, ActiveScreen } from './types';
 import { initializeRandomForest, runBioPlantIntelligence } from './ml/engine';
 import { LanguageProvider } from './context/LanguageContext';
-import { getCropPrediction } from './services/apiService';
+import { getCropPrediction, checkBackendHealth } from './services/apiService';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -73,6 +73,8 @@ export function AppContent() {
   // Initialize Random Forest Classifier and prepare baseline recommendation on boot
   useEffect(() => {
     initializeRandomForest();
+    // Warm up backend if sleeping on Render free tier
+    checkBackendHealth().catch(() => {});
     const baseline = runBioPlantIntelligence(
       STITCH_FIELDS[0].currentMetrics,
       STITCH_FIELDS[0].weatherProfile,
@@ -93,24 +95,20 @@ export function AppContent() {
     setIsLoading(true);
 
     try {
-      const backendResult = await getCropPrediction(soil, weather, selectedField.id);
-      // Map backend response shape to frontend PredictionResult shape
-      const result: PredictionResult = backendResult as PredictionResult;
+      const result = await getCropPrediction(soil, weather, selectedField.id);
       setPredictionResult(result);
       setIsLoading(false);
       setIsSavedInHistory(false);
       setCurrentScreen('results');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
-      // Backend unavailable - use local Random Forest engine
-      setTimeout(() => {
-        const result = runBioPlantIntelligence(soil, weather, selectedField.id);
-        setPredictionResult(result);
-        setIsLoading(false);
-        setIsSavedInHistory(false);
-        setCurrentScreen('results');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 600);
+      // Backend unavailable or timed out - immediate fallback to local Random Forest engine
+      const result = runBioPlantIntelligence(soil, weather, selectedField.id);
+      setPredictionResult(result);
+      setIsLoading(false);
+      setIsSavedInHistory(false);
+      setCurrentScreen('results');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

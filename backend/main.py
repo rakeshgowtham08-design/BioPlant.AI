@@ -212,17 +212,24 @@ if FastAPI:
     )
 
     # Configure CORS for production
-    origins = [
+    allowed_origins = [
         FRONTEND_URL,
+        "https://bioplant-ai-frontend.onrender.com",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
     ]
+    # Remove empty items and trailing slashes
+    allowed_origins = list(set([o.rstrip("/") for o in allowed_origins if o]))
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=allowed_origins,
+        allow_origin_regex=r"^https:\/\/.*\.onrender\.com$",
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["*"],
         allow_headers=["*"],
     )
 
@@ -495,6 +502,24 @@ if FastAPI:
                 "idealMin": ideals["ph"][0],
                 "idealMax": ideals["ph"][1],
                 "status": "Optimal" if ideals["ph"][0] <= data.ph <= ideals["ph"][1] else ("Low" if data.ph < ideals["ph"][0] else "High")
+            },
+            {
+                "name": "Precipitation / Rainfall",
+                "key": "rainfall",
+                "unit": "mm",
+                "userValue": data.rainfall,
+                "idealMin": ideals["rainfall"][0],
+                "idealMax": ideals["rainfall"][1],
+                "status": "Optimal" if ideals["rainfall"][0] <= data.rainfall <= ideals["rainfall"][1] else ("Low" if data.rainfall < ideals["rainfall"][0] else "High")
+            },
+            {
+                "name": "Ambient Temperature",
+                "key": "temperature",
+                "unit": "°C",
+                "userValue": data.temperature,
+                "idealMin": ideals["temperature"][0],
+                "idealMax": ideals["temperature"][1],
+                "status": "Optimal" if ideals["temperature"][0] <= data.temperature <= ideals["temperature"][1] else ("Low" if data.temperature < ideals["temperature"][0] else "High")
             }
         ]
 
