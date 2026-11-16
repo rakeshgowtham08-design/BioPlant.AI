@@ -1,8 +1,8 @@
 services:
   # Frontend - Static Site (React + Vite)
-  - type: static
+  - type: web
     name: bioplant-ai-frontend
-    env: static
+    runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     routes:
@@ -10,34 +10,26 @@ services:
         source: /*
         destination: /index.html
     envVars:
-      # Frontend environment variables - to be configured in Render dashboard
       - key: VITE_API_URL
-        fromService:
-          name: bioplant-ai-backend
-          type: web
-          property: url
+        value: https://bioplant-ai-backend.onrender.com
       - key: VITE_SUPABASE_URL
-        sync: false  # Configure manually in Render dashboard
+        value: https://rysmaaqxcwrrthasvcvh.supabase.co
       - key: VITE_SUPABASE_ANON_KEY
-        sync: false  # Configure manually in Render dashboard
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5c21hYXF4Y3dycnRoYXN2Y3ZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1NTg0NDIsImV4cCI6MjExMDEzNDQ0Mn0.PiH95woLahRgdPG2LSFQLNsdw1k53OlBON4Yg3jFddU
 
   # Backend - FastAPI Web Service
   - type: web
     name: bioplant-ai-backend
-    env: python
+    runtime: python
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     rootDir: backend
     envVars:
-      # Backend environment variables - to be configured in Render dashboard
       - key: SUPABASE_URL
-        sync: false
+        value: https://rysmaaqxcwrrthasvcvh.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5c21hYXF4Y3dycnRoYXN2Y3ZoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5NDU1ODQ0MiwiZXhwIjoyMTEwMTM0NDQyfQ.S4S38rBFinoj_qAqQXRTqF0PIgaNjqLFkCeM9sm8Nso
       - key: FRONTEND_URL
-        fromService:
-          name: bioplant-ai-frontend
-          type: static
-          property: url
+        value: https://bioplant-ai-frontend.onrender.com
